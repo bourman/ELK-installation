@@ -1,0 +1,46 @@
+1)Deploy node pool for an ELK cluster. We are currently are using 1 node 4vCpu, 16GB ram. At the time of writing this document, it was Standard_D4s_v4. Please choose the same version as the cluster version and name elknodepool.
+2)Create a namespace for ELK:
+Command :
+>  kubectl create namespace <env>-elk  < 
+3)Apply elasticsearch service, please modify namespace inside the file and line with "azure-load-balancer-internal-subnet" with the proper name of the subnet for AKS:
+Command :
+>  kubectl apply -f ./es-service.yaml  <
+4)Apply elasticsearch deployment, please modify namespace:
+Command :
+>  kubectl apply -f ./es-service.yaml  <
+5)Apply elasticsearch stateful set, please modify namespace:
+Command :
+>  kubectl apply -f ./es-deployment.yaml  <
+6)Upload config map to cluster:
+Command : 
+>  kubectl create configmap logstash-configmap --from-file logstash.yml -n <env>-elk  <
+>  kubectl create configmap logstash-pipeline-volume --from-file logstash.conf -n <env>-elk  <
+7)Apply logstash service yml, please modify line with ES_HOSTS value and change it external LB IP address:
+Command :
+>  kubectl get svc -n <env>-elk  <
+>  kubectl apply -f ./logstash-deployment.yaml  <
+8)Apply logstash service yml, please modify namespace inside the file and line with "azure-load-balancer-internal-subnet" with the proper name of the subnet for AKS:
+Command :
+>  kubectl apply -f ./logstash-service.yaml  <
+9)Confirm that elasticsearch creating indexes by opening elasticsearch url:
+URL : "http://elasticsearch _ip:9200/_cat/indices?v"
+10)Apply logstash deployment yaml, please modify namespace and value for ES_HOST env variable, format of this variable is my-svc.my-namespace.svc.cluster.local, for example elasticsearch.pprd-elk.svc.cluster.local:
+Command : 
+>  kubectl apply -f ./logstash-deployment.yaml  <
+11)Apply cluster role binding for Filebeat, please modify namespace name and IP under line LOGSTASH_URL with external IP of logstash service:
+Command :
+>  kubectl create configmap filebeat-config --from-file filebeat.yml -n <env>-elk  <
+12)Prepare storage account for logs and create secret for that in kubernetes:
+Command :
+>  kubectl create secret generic storage-secret --from-literal=azurestorageaccountname=<storage-account-name> --from-literal=azurestorageaccountkey=<storage-access-key> -n <namespace>  <
+13)Check filbeat.yml and change it according to a directory structure in azure storage. Important part are in lines with path.
+14)Apply filebeat daemonset yaml, please modify namespace and IP in line output.logstash: -> hosts with external IP of logstash service
+Command :
+>  kubectl apply -f ./filebeat-daemonset.yaml  <
+15)Apply kibana service yaml, please modify namespace inside the file and line with "azure-load-balancer-internal-subnet" with the proper name of the subnet for AKS. Also please check line underELASTICSEARCH_URL- format of this variable is http://es-cluster-[0,1,2].my-svc.my-namespace.svc.cluster.local, for example http://es-cluster-[0,1,2].elasticsearch.pprd-elk.svc.cluster.local
+Command :
+>  kubectl apply -f ./kibana.yaml  <
+16)Log in to kibana:
+http://kibana_ip:5601
+17)Create index patterns. Choose management -> index patterns -> Create index pattern -> put index pattern name (it probably should be same as index in logstash.conf) -> @timestamp
+18)Check if all layers logs are in elastic search, filter it through cs_layer : <layer> (name1, name2, name3 , name4)
